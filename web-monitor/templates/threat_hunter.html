@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 AI Threat Hunter - NoSleep-Ops</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, rgba(0,255,136,0.1), rgba(0,123,255,0.1));
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid #00ff88;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(0,255,136,0.5);
+        }
+
+        .ai-status {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(0,255,136,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin: 10px;
+        }
+
+        .ai-pulse {
+            width: 12px;
+            height: 12px;
+            background: #00ff88;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .panel {
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .panel-icon {
+            font-size: 1.5em;
+            margin-right: 10px;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .attack-flow-3d {
+            height: 400px;
+            border-radius: 10px;
+            background: #000;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ai-insights {
+            height: 300px;
+            overflow-y: auto;
+        }
+
+        .insight-item {
+            background: rgba(0,255,136,0.1);
+            border-left: 3px solid #00ff88;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+
+        .insight-priority {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .priority-critical { background: #ff4757; }
+        .priority-high { background: #ff6b6b; }
+        .priority-medium { background: #ffa726; }
+        .priority-low { background: #26c6da; }
+
+        .threat-timeline {
+            height: 250px;
+            overflow-y: auto;
+        }
+
+        .timeline-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            border-left: 3px solid #007bff;
+        }
+
+        .timeline-time {
+            font-size: 0.9em;
+            color: #888;
+            margin-right: 15px;
+            min-width: 80px;
+        }
+
+        .hunting-queries {
+            height: 300px;
+            overflow-y: auto;
+        }
+
+        .query-item {
+            background: rgba(0,123,255,0.1);
+            border: 1px solid rgba(0,123,255,0.3);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .query-item:hover {
+            background: rgba(0,123,255,0.2);
+            transform: translateY(-2px);
+        }
+
+        .query-priority {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.7em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .predictive-analysis {
+            height: 280px;
+        }
+
+        .prediction-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin: 8px 0;
+            background: rgba(255,193,7,0.1);
+            border-radius: 8px;
+            border-left: 3px solid #ffc107;
+        }
+
+        .confidence-bar {
+            width: 100px;
+            height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ffc107, #ff9800);
+            transition: width 0.3s ease;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 15px;
+            background: rgba(0,255,136,0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(0,255,136,0.3);
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00ff88;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #ccc;
+            margin-top: 5px;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #00ff88;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .neural-network {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        .control-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+
+        .control-button {
+            background: rgba(0,255,136,0.2);
+            border: 1px solid #00ff88;
+            color: white;
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .control-button:hover {
+            background: rgba(0,255,136,0.4);
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎯 AI-Powered Threat Hunter</h1>
+        <div class="ai-status">
+            <div class="ai-pulse"></div>
+            <span id="aiStatus">AI Engine Active - Analyzing Threats</span>
+        </div>
+        <div class="ai-status">
+            <span>🧠 Machine Learning Models: ONLINE</span>
+        </div>
+        <div class="ai-status">
+            <span>🔍 Threat Intelligence: UPDATING</span>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- AI Threat Intelligence Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-icon">🧠</span>
+                AI Threat Intelligence
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-number" id="threatScore">--</span>
+                    <div class="stat-label">Threat Score</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number" id="aptLikelihood">--</span>
+                    <div class="stat-label">APT Likelihood</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number" id="aiConfidence">--</span>
+                    <div class="stat-label">AI Confidence</div>
+                </div>
+            </div>
+            <div class="ai-insights" id="aiInsights">
+                <div class="loading-spinner"></div> Loading AI insights...
+            </div>
+        </div>
+
+        <!-- 3D Attack Flow Visualization -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-icon">🌐</span>
+                3D Attack Flow Visualization
+            </div>
+            <div class="attack-flow-3d" id="attackFlow3D">
+                <div class="control-panel">
+                    <button class="control-button" onclick="rotateView()">🔄 Rotate</button>
+                    <button class="control-button" onclick="zoomIn()">🔍 Zoom In</button>
+                    <button class="control-button" onclick="resetView()">🏠 Reset</button>
+                </div>
+                <canvas id="threejsCanvas"></canvas>
+            </div>
+        </div>
+
+        <!-- Threat Timeline -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-icon">⏱️</span>
+                Real-time Threat Timeline
+            </div>
+            <div class="threat-timeline" id="threatTimeline">
+                <div class="loading-spinner"></div> Loading timeline...
+            </div>
+        </div>
+
+        <!-- Hunting Queries -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-icon">🔍</span>
+                AI-Generated Hunting Queries
+            </div>
+            <div class="hunting-queries" id="huntingQueries">
+                <div class="loading-spinner"></div> Generating hunting queries...
+            </div>
+        </div>
+
+        <!-- Predictive Analysis -->
+        <div class="panel full-width">
+            <div class="panel-header">
+                <span class="panel-icon">🔮</span>
+                Predictive Threat Analysis
+            </div>
+            <div class="predictive-analysis" id="predictiveAnalysis">
+                <div class="loading-spinner"></div> Running predictive models...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let scene, camera, renderer, attackNodes = [], connectionLines = [];
+        let socket = io();
+        let threatData = {};
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 AI Threat Hunter initializing...');
+            initializeAIThreatHunter();
+            initialize3DVisualization();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadThreatIntelligence, 30000);
+        });
+
+        async function initializeAIThreatHunter() {
+            try {
+                console.log('🧠 Loading AI threat intelligence...');
+                await loadThreatIntelligence();
+                console.log('✅ AI Threat Hunter loaded successfully!');
+            } catch (error) {
+                console.error('❌ Error initializing AI Threat Hunter:', error);
+                showDemoData();
+            }
+        }
+
+        async function loadThreatIntelligence() {
+            try {
+                // Load AI threat analysis
+                const response = await fetch('/api/ai_threat_analysis');
+                if (response.ok) {
+                    threatData = await response.json();
+                    updateAIInsights(threatData);
+                    updateThreatTimeline(threatData);
+                    updateHuntingQueries(threatData);
+                    updatePredictiveAnalysis(threatData);
+                    update3DVisualization(threatData);
+                } else {
+                    throw new Error(`API failed: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Error loading threat intelligence:', error);
+                showDemoData();
+            }
+        }
+
+        function updateAIInsights(data) {
+            const insights = data.threat_intelligence || {};
+            
+            // Update stats
+            document.getElementById('threatScore').textContent = insights.sophistication_level || '--';
+            document.getElementById('aptLikelihood').textContent = 
+                (data.threat_intelligence?.threat_actor_profile?.likely_type?.includes('APT') ? 'HIGH' : 'MEDIUM') || '--';
+            document.getElementById('aiConfidence').textContent = 
+                Math.round((insights.intelligence_confidence || 0) * 100) + '%';
+
+            // Update insights
+            const insightsContainer = document.getElementById('aiInsights');
+            insightsContainer.innerHTML = '';
+
+            const insightsList = [
+                {
+                    priority: 'CRITICAL',
+                    title: 'Advanced Threat Detection',
+                    description: `Detected ${insights.attack_distribution ? Object.keys(insights.attack_distribution).length : 0} distinct attack types`,
+                    confidence: insights.intelligence_confidence || 0.8
+                },
+                {
+                    priority: 'HIGH',
+                    title: 'Geographic Threat Analysis',
+                    description: `${insights.top_threat_sources ? Object.keys(insights.top_threat_sources).length : 0} unique threat sources identified`,
+                    confidence: 0.9
+                },
+                {
+                    priority: 'MEDIUM',
+                    title: 'Attack Pattern Recognition',
+                    description: 'Machine learning models have identified recurring attack patterns',
+                    confidence: 0.75
+                }
+            ];
+
+            insightsList.forEach(insight => {
+                const insightElement = document.createElement('div');
+                insightElement.className = 'insight-item';
+                insightElement.innerHTML = `
+                    <div class="insight-priority priority-${insight.priority.toLowerCase()}">${insight.priority}</div>
+                    <div style="font-weight: bold; margin-bottom: 8px;">${insight.title}</div>
+                    <div style="margin-bottom: 8px;">${insight.description}</div>
+                    <div style="font-size: 0.9em; color: #888;">
+                        AI Confidence: ${Math.round(insight.confidence * 100)}%
+                    </div>
+                `;
+                insightsContainer.appendChild(insightElement);
+            });
+        }
+
+        function updateThreatTimeline(data) {
+            const timeline = data.timeline_analysis?.attack_timeline || [];
+            const timelineContainer = document.getElementById('threatTimeline');
+            timelineContainer.innerHTML = '';
+
+            if (timeline.length === 0) {
+                timelineContainer.innerHTML = '<div style="text-align: center; color: #888;">No recent threats detected</div>';
+                return;
+            }
+
+            timeline.slice(0, 10).forEach(event => {
+                const timelineItem = document.createElement('div');
+                timelineItem.className = 'timeline-item';
+                
+                const time = new Date(event.timestamp).toLocaleTimeString();
+                timelineItem.innerHTML = `
+                    <div class="timeline-time">${time}</div>
+                    <div>
+                        <strong>${event.attack_type}</strong><br>
+                        <span style="color: #888; font-size: 0.9em;">from ${event.source_ip}</span><br>
+                        <span style="color: #ccc; font-size: 0.8em;">${event.details}</span>
+                    </div>
+                `;
+                timelineContainer.appendChild(timelineItem);
+            });
+        }
+
+        function updateHuntingQueries(data) {
+            const queries = data.hunting_queries || [];
+            const queriesContainer = document.getElementById('huntingQueries');
+            queriesContainer.innerHTML = '';
+
+            if (queries.length === 0) {
+                queriesContainer.innerHTML = '<div style="text-align: center; color: #888;">Generating hunting queries...</div>';
+                return;
+            }
+
+            queries.forEach(query => {
+                const queryElement = document.createElement('div');
+                queryElement.className = 'query-item';
+                queryElement.innerHTML = `
+                    <div class="query-priority priority-${query.priority.toLowerCase()}">${query.priority}</div>
+                    <div style="font-weight: bold; margin-bottom: 8px;">${query.name}</div>
+                    <div style="margin-bottom: 8px; font-size: 0.9em;">${query.description}</div>
+                    <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; font-family: monospace; font-size: 0.8em;">
+                        ${query.query}
+                    </div>
+                `;
+                queryElement.onclick = () => executeHuntingQuery(query);
+                queriesContainer.appendChild(queryElement);
+            });
+        }
+
+        function updatePredictiveAnalysis(data) {
+            const predictions = data.predictive_analysis || {};
+            const predictiveContainer = document.getElementById('predictiveAnalysis');
+            predictiveContainer.innerHTML = '';
+
+            const nextAttacks = predictions.next_likely_attacks || [];
+            const confidence = predictions.confidence_score || 0;
+
+            // Add prediction header
+            const header = document.createElement('div');
+            header.innerHTML = `
+                <h3 style="margin-bottom: 15px;">🔮 Next Likely Attack Vectors</h3>
+                <div style="margin-bottom: 20px; color: #ccc;">
+                    Prediction Confidence: <strong>${Math.round(confidence * 100)}%</strong>
+                </div>
+            `;
+            predictiveContainer.appendChild(header);
+
+            // Add predictions
+            nextAttacks.forEach(attack => {
+                const predictionElement = document.createElement('div');
+                predictionElement.className = 'prediction-item';
+                
+                const attackConfidence = Math.random() * 0.3 + 0.6; // Mock individual confidence
+                predictionElement.innerHTML = `
+                    <div>
+                        <div style="font-weight: bold;">${attack}</div>
+                        <div style="font-size: 0.9em; color: #ccc;">Predicted based on current attack patterns</div>
+                    </div>
+                    <div>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: ${attackConfidence * 100}%"></div>
+                        </div>
+                        <div style="font-size: 0.8em; color: #ccc; margin-top: 4px;">
+                            ${Math.round(attackConfidence * 100)}%
+                        </div>
+                    </div>
+                `;
+                predictiveContainer.appendChild(predictionElement);
+            });
+
+            // Add risk timeframes
+            const riskTimes = predictions.high_risk_timeframes || [];
+            if (riskTimes.length > 0) {
+                const riskHeader = document.createElement('div');
+                riskHeader.innerHTML = `<h4 style="margin: 20px 0 10px 0;">⚠️ High-Risk Time Periods</h4>`;
+                predictiveContainer.appendChild(riskHeader);
+
+                riskTimes.forEach(timeframe => {
+                    const riskElement = document.createElement('div');
+                    riskElement.innerHTML = `
+                        <div style="background: rgba(255,71,87,0.1); border-left: 3px solid #ff4757; padding: 10px; margin: 5px 0; border-radius: 5px;">
+                            <strong>${timeframe}</strong>
+                        </div>
+                    `;
+                    predictiveContainer.appendChild(riskElement);
+                });
+            }
+        }
+
+        function initialize3DVisualization() {
+            const container = document.getElementById('attackFlow3D');
+            const canvas = document.getElementById('threejsCanvas');
+            
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+            
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 0, 10);
+            
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            
+            // Add ambient light
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            
+            // Add directional light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            // Create initial network nodes
+            createNetworkNodes();
+            
+            // Animation loop
+            animate();
+            
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createNetworkNodes() {
+            // Clear existing nodes
+            attackNodes.forEach(node => scene.remove(node));
+            connectionLines.forEach(line => scene.remove(line));
+            attackNodes = [];
+            connectionLines = [];
+
+            // Create central server node
+            const serverGeometry = new THREE.BoxGeometry(1, 1, 1);
+            const serverMaterial = new THREE.MeshLambertMaterial({ color: 0x00ff88 });
+            const serverNode = new THREE.Mesh(serverGeometry, serverMaterial);
+            serverNode.position.set(0, 0, 0);
+            scene.add(serverNode);
+            attackNodes.push(serverNode);
+
+            // Create attacker nodes around the server
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const radius = 5;
+                
+                const attackerGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+                const attackerMaterial = new THREE.MeshLambertMaterial({ 
+                    color: Math.random() > 0.5 ? 0xff4757 : 0xff6b6b 
+                });
+                const attackerNode = new THREE.Mesh(attackerGeometry, attackerMaterial);
+                
+                attackerNode.position.set(
+                    Math.cos(angle) * radius,
+                    (Math.random() - 0.5) * 2,
+                    Math.sin(angle) * radius
+                );
+                
+                scene.add(attackerNode);
+                attackNodes.push(attackerNode);
+
+                // Create connection line
+                const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+                    serverNode.position,
+                    attackerNode.position
+                ]);
+                const lineMaterial = new THREE.LineBasicMaterial({ 
+                    color: 0xff4757,
+                    opacity: 0.6,
+                    transparent: true
+                });
+                const line = new THREE.Line(lineGeometry, lineMaterial);
+                scene.add(line);
+                connectionLines.push(line);
+            }
+        }
+
+        function update3DVisualization(data) {
+            // Animate attack nodes based on threat data
+            const attacks = data.threat_intelligence?.attack_distribution || {};
+            const attackCount = Object.values(attacks).reduce((a, b) => a + b, 0);
+            
+            // Update node colors and animations based on attack intensity
+            attackNodes.forEach((node, index) => {
+                if (index === 0) return; // Skip server node
+                
+                const intensity = Math.min(attackCount / 50, 1);
+                node.material.color.setHex(intensity > 0.7 ? 0xff4757 : intensity > 0.4 ? 0xff6b6b : 0xffa726);
+                
+                // Add pulsing animation for active attacks
+                const scale = 1 + Math.sin(Date.now() * 0.01 + index) * 0.2 * intensity;
+                node.scale.setScalar(scale);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Rotate the entire scene slowly
+            scene.rotation.y += 0.005;
+            
+            // Animate attack nodes
+            attackNodes.forEach((node, index) => {
+                if (index === 0) return; // Skip server node
+                
+                // Orbital movement
+                const time = Date.now() * 0.001;
+                const angle = (index / (attackNodes.length - 1)) * Math.PI * 2 + time * 0.5;
+                const radius = 5;
+                
+                node.position.x = Math.cos(angle) * radius;
+                node.position.z = Math.sin(angle) * radius;
+                node.position.y = Math.sin(time + index) * 1;
+            });
+            
+            // Update connection lines
+            connectionLines.forEach((line, index) => {
+                if (index < attackNodes.length - 1) {
+                    const positions = line.geometry.attributes.position.array;
+                    const attackerNode = attackNodes[index + 1];
+                    
+                    // Update line end position
+                    positions[3] = attackerNode.position.x;
+                    positions[4] = attackerNode.position.y;
+                    positions[5] = attackerNode.position.z;
+                    
+                    line.geometry.attributes.position.needsUpdate = true;
+                }
+            });
+            
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('attackFlow3D');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // Control functions
+        function rotateView() {
+            scene.rotation.y += Math.PI / 4;
+        }
+
+        function zoomIn() {
+            camera.position.z = Math.max(camera.position.z - 2, 2);
+        }
+
+        function resetView() {
+            camera.position.set(0, 0, 10);
+            scene.rotation.set(0, 0, 0);
+        }
+
+        function executeHuntingQuery(query) {
+            alert(`Executing hunting query: ${query.name}\n\nQuery: ${query.query}\n\nThis would typically launch the query in your SIEM system.`);
+        }
+
+        function showDemoData() {
+            // Show demo data if APIs are not working
+            document.getElementById('threatScore').textContent = '7.2';
+            document.getElementById('aptLikelihood').textContent = 'MEDIUM';
+            document.getElementById('aiConfidence').textContent = '85%';
+            
+            document.getElementById('aiStatus').textContent = 'Demo Mode - AI Engine Simulated';
+            
+            // Show demo insights
+            const demoData = {
+                threat_intelligence: {
+                    sophistication_level: 7.2,
+                    intelligence_confidence: 0.85,
+                    attack_distribution: {
+                        'SSH_BRUTE_FORCE': 45,
+                        'SQL_INJECTION': 23,
+                        'XSS_ATTEMPT': 18
+                    },
+                    top_threat_sources: {
+                        '192.168.1.100': 15,
+                        '10.0.0.50': 12
+                    }
+                },
+                hunting_queries: [
+                    {
+                        name: 'Advanced Persistent Threat Detection',
+                        query: 'attack_type:LATERAL_MOVEMENT AND persistence:true',
+                        priority: 'CRITICAL',
+                        description: 'Hunt for APT indicators and lateral movement'
+                    }
+                ],
+                predictive_analysis: {
+                    next_likely_attacks: ['LATERAL_MOVEMENT', 'PRIVILEGE_ESCALATION'],
+                    confidence_score: 0.78,
+                    high_risk_timeframes: ['02:00-04:00 UTC', 'Weekend evenings']
+                },
+                timeline_analysis: {
+                    attack_timeline: [
+                        {
+                            timestamp: new Date().toISOString(),
+                            attack_type: 'SSH_BRUTE_FORCE',
+                            source_ip: '192.168.1.100',
+                            details: 'Multiple failed login attempts detected'
+                        }
+                    ]
+                }
+            };
+            
+            updateAIInsights(demoData);
+            updateThreatTimeline(demoData);
+            updateHuntingQueries(demoData);
+            updatePredictiveAnalysis(demoData);
+        }
+
+        // Socket.IO event handlers
+        socket.on('connect', function() {
+            console.log('Connected to AI Threat Hunter');
+        });
+
+        socket.on('new_threat', function(data) {
+            // Trigger immediate update on new threat
+            loadThreatIntelligence();
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoSleep-Ops Attack Monitor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 100%);
+            color: #ffffff;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+            padding: 1rem 2rem;
+            box-shadow: 0 4px 20px rgba(255, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #00ff00;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(255, 0, 0, 0.2);
+        }
+
+        .card h3 {
+            color: #ff6b6b;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #ff6b6b;
+            display: block;
+        }
+
+        .stat-label {
+            color: #cccccc;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+
+        .attack-feed {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .attack-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 6px;
+            border-left: 4px solid;
+            animation: slideIn 0.5s ease;
+        }
+
+        .attack-item.high {
+            border-left-color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
+        }
+
+        .attack-item.medium {
+            border-left-color: #ffaa00;
+            background: rgba(255, 170, 0, 0.1);
+        }
+
+        .attack-item.low {
+            border-left-color: #00ff00;
+            background: rgba(0, 255, 0, 0.1);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .attack-time {
+            font-size: 0.8rem;
+            color: #888;
+            float: right;
+        }
+
+        .attack-details {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 1rem;
+        }
+
+        .control-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            grid-column: 1 / -1;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ffaa00 0%, #cc8800 100%);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+            color: black;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .manual-block {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            margin-top: 1rem;
+        }
+
+        .manual-block input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .manual-block input::placeholder {
+            color: #888;
+        }
+
+        .top-attackers {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .attacker-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            border-left: 3px solid #ff6b6b;
+        }
+
+        .attacker-ip {
+            font-family: monospace;
+            color: #ff6b6b;
+        }
+
+        .attacker-count {
+            background: rgba(255, 107, 107, 0.2);
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+
+        .defense-feed {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .defense-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 6px;
+            border-left: 4px solid #00ff00;
+            background: rgba(0, 255, 0, 0.1);
+            animation: slideIn 0.5s ease;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            z-index: 1000;
+        }
+
+        .connection-status.connected {
+            background: rgba(0, 255, 0, 0.2);
+            border: 1px solid #00ff00;
+            color: #00ff00;
+        }
+
+        .connection-status.disconnected {
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff0000;
+            color: #ff0000;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">
+        <i class="fas fa-circle"></i> Connecting...
+    </div>
+
+    <header class="header">
+        <h1>
+            <i class="fas fa-shield-alt"></i>
+            NoSleep-Ops Attack Monitor
+            <div class="status-indicator" id="statusIndicator"></div>
+        </h1>
+    </header>
+
+    <div class="dashboard">
+        <!-- Statistics Overview -->
+        <div class="stats-grid" style="grid-column: 1 / -1;">
+            <div class="stat-card">
+                <span class="stat-number" id="totalAttacks">0</span>
+                <div class="stat-label">Total Attacks</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" id="uniqueIPs">0</span>
+                <div class="stat-label">Unique IPs</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" id="blockedIPs">0</span>
+                <div class="stat-label">Blocked IPs</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" id="defenseActions">0</span>
+                <div class="stat-label">Defense Actions</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" id="fail2banBans">0</span>
+                <div class="stat-label">Fail2Ban Bans</div>
+            </div>
+        </div>
+
+        <!-- Real-time Attack Feed -->
+        <div class="card">
+            <h3><i class="fas fa-exclamation-triangle"></i> Live Attack Feed</h3>
+            <div class="attack-feed" id="attackFeed">
+                <div style="text-align: center; color: #666; margin-top: 2rem;">
+                    <i class="fas fa-radar"></i><br>
+                    Monitoring for attacks...
+                </div>
+            </div>
+        </div>
+
+        <!-- Attack Types Chart -->
+        <div class="card">
+            <h3><i class="fas fa-chart-pie"></i> Attack Types</h3>
+            <div class="chart-container">
+                <canvas id="attackTypesChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Top Attackers -->
+        <div class="card">
+            <h3><i class="fas fa-user-ninja"></i> Top Attackers</h3>
+            <div class="top-attackers" id="topAttackers">
+                <div style="text-align: center; color: #666; margin-top: 2rem;">
+                    No attackers detected yet...
+                </div>
+            </div>
+        </div>
+
+        <!-- Defense Actions Feed -->
+        <div class="card">
+            <h3><i class="fas fa-shield"></i> Defense Actions</h3>
+            <div class="defense-feed" id="defenseFeed">
+                <div style="text-align: center; color: #666; margin-top: 2rem;">
+                    <i class="fas fa-shield-alt"></i><br>
+                    Monitoring defense responses...
+                </div>
+            </div>
+        </div>
+
+        <!-- Attack Timeline Chart -->
+        <div class="card">
+            <h3><i class="fas fa-chart-line"></i> Attack Timeline</h3>
+            <div class="chart-container">
+                <canvas id="timelineChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <h3><i class="fas fa-cogs"></i> Defense Control Panel</h3>
+            <div class="control-buttons">
+                <button class="btn btn-danger" onclick="emergencyBlock()">
+                    <i class="fas fa-ban"></i> Emergency Block
+                </button>
+                <button class="btn btn-warning" onclick="clearAlerts()">
+                    <i class="fas fa-trash"></i> Clear Alerts
+                </button>
+                <button class="btn btn-success" onclick="exportLogs()">
+                    <i class="fas fa-download"></i> Export Logs
+                </button>
+            </div>
+            
+            <div class="manual-block">
+                <input type="text" id="blockIP" placeholder="Enter IP address to block manually">
+                <input type="text" id="blockReason" placeholder="Reason for blocking">
+                <button class="btn btn-danger" onclick="manualBlock()">
+                    <i class="fas fa-hammer"></i> Block IP
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Socket.IO connection
+        const socket = io();
+        
+        // Global variables
+        let attackTypesChart, timelineChart;
+        let attackCounts = {};
+        let timelineData = [];
+        
+        // Connection status handling
+        socket.on('connect', function() {
+            document.getElementById('connectionStatus').className = 'connection-status connected';
+            document.getElementById('connectionStatus').innerHTML = '<i class="fas fa-circle"></i> Connected';
+        });
+        
+        socket.on('disconnect', function() {
+            document.getElementById('connectionStatus').className = 'connection-status disconnected';
+            document.getElementById('connectionStatus').innerHTML = '<i class="fas fa-circle"></i> Disconnected';
+        });
+        
+        // Real-time attack handling
+        socket.on('new_attack', function(data) {
+            addAttackToFeed(data);
+            updateStats();
+            updateCharts();
+        });
+        
+        // Real-time defense action handling
+        socket.on('defense_action', function(data) {
+            addDefenseToFeed(data);
+            updateStats();
+        });
+        
+        function addAttackToFeed(attack) {
+            const feed = document.getElementById('attackFeed');
+            const item = document.createElement('div');
+            item.className = `attack-item ${attack.severity.toLowerCase()}`;
+            
+            const time = new Date(attack.timestamp).toLocaleTimeString();
+            item.innerHTML = `
+                <div class="attack-time">${time}</div>
+                <strong>${attack.attack_type}</strong> from <code>${attack.source_ip}</code>
+                <div class="attack-details">${attack.details}</div>
+            `;
+            
+            feed.insertBefore(item, feed.firstChild);
+            
+            // Remove old items to prevent memory issues
+            while (feed.children.length > 50) {
+                feed.removeChild(feed.lastChild);
+            }
+        }
+        
+        function addDefenseToFeed(defense) {
+            const feed = document.getElementById('defenseFeed');
+            const item = document.createElement('div');
+            item.className = 'defense-item';
+            
+            const time = new Date(defense.timestamp).toLocaleTimeString();
+            item.innerHTML = `
+                <div class="attack-time">${time}</div>
+                <strong>${defense.action_type}</strong> ${defense.target_ip ? `on ${defense.target_ip}` : ''}
+                <div class="attack-details">${defense.details}</div>
+            `;
+            
+            feed.insertBefore(item, feed.firstChild);
+            
+            // Remove old items to prevent memory issues
+            while (feed.children.length > 30) {
+                feed.removeChild(feed.lastChild);
+            }
+        }
+        
+        function updateStats() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('totalAttacks').textContent = data.total_attacks;
+                    document.getElementById('uniqueIPs').textContent = data.unique_ips;
+                    document.getElementById('blockedIPs').textContent = data.blocked_ips;
+                    document.getElementById('defenseActions').textContent = Object.values(data.defense_actions).reduce((a, b) => a + b, 0);
+                    document.getElementById('fail2banBans').textContent = data.fail2ban_bans;
+                    
+                    updateTopAttackers(data.top_attackers);
+                    attackCounts = data.attack_types;
+                    updateCharts();
+                });
+        }
+        
+        function updateTopAttackers(attackers) {
+            const container = document.getElementById('topAttackers');
+            container.innerHTML = '';
+            
+            if (Object.keys(attackers).length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: #666; margin-top: 2rem;">No attackers detected yet...</div>';
+                return;
+            }
+            
+            Object.entries(attackers).forEach(([ip, count]) => {
+                const item = document.createElement('div');
+                item.className = 'attacker-item';
+                item.innerHTML = `
+                    <span class="attacker-ip">${ip}</span>
+                    <span class="attacker-count">${count} attacks</span>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function initCharts() {
+            // Attack Types Pie Chart
+            const ctx1 = document.getElementById('attackTypesChart').getContext('2d');
+            attackTypesChart = new Chart(ctx1, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7',
+                            '#dda0dd', '#98d8c8', '#f7dc6f', '#bb8fce', '#85c1e9'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#ffffff'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Timeline Chart
+            const ctx2 = document.getElementById('timelineChart').getContext('2d');
+            timelineChart = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Attacks per Minute',
+                        data: [],
+                        borderColor: '#ff6b6b',
+                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#ffffff'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#ffffff'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#ffffff'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateCharts() {
+            // Update attack types chart
+            if (attackTypesChart && attackCounts) {
+                attackTypesChart.data.labels = Object.keys(attackCounts);
+                attackTypesChart.data.datasets[0].data = Object.values(attackCounts);
+                attackTypesChart.update();
+            }
+            
+            // Update timeline chart (simplified - just show recent activity)
+            if (timelineChart) {
+                const now = new Date();
+                const labels = [];
+                const data = [];
+                
+                for (let i = 9; i >= 0; i--) {
+                    const time = new Date(now.getTime() - i * 60000);
+                    labels.push(time.toLocaleTimeString().slice(0, 5));
+                    data.push(Math.floor(Math.random() * 5)); // Placeholder data
+                }
+                
+                timelineChart.data.labels = labels;
+                timelineChart.data.datasets[0].data = data;
+                timelineChart.update();
+            }
+        }
+        
+        function manualBlock() {
+            const ip = document.getElementById('blockIP').value;
+            const reason = document.getElementById('blockReason').value || 'Manual block via web interface';
+            
+            if (!ip) {
+                alert('Please enter an IP address');
+                return;
+            }
+            
+            fetch('/api/manual_block', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ip: ip, reason: reason })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                if (data.status === 'success') {
+                    document.getElementById('blockIP').value = '';
+                    document.getElementById('blockReason').value = '';
+                }
+            });
+        }
+        
+        function emergencyBlock() {
+            if (confirm('This will block all current attacking IPs. Continue?')) {
+                alert('Emergency block activated! (Feature to be implemented)');
+            }
+        }
+        
+        function clearAlerts() {
+            document.getElementById('attackFeed').innerHTML = '<div style="text-align: center; color: #666; margin-top: 2rem;"><i class="fas fa-radar"></i><br>Monitoring for attacks...</div>';
+        }
+        
+        function exportLogs() {
+            alert('Log export feature coming soon!');
+        }
+        
+        // Initialize everything when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+            updateStats();
+            
+            // Update stats every 5 seconds
+            setInterval(updateStats, 5000);
+        });
+    </script>
+</body>
+</html> 

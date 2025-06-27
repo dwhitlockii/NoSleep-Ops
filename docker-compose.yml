@@ -1,0 +1,97 @@
+services:
+  ubuntu-host:
+    build:
+      context: ./ubuntu-host
+    container_name: ubuntu-host
+    privileged: true
+    tty: true
+    stdin_open: true
+    volumes:
+      - ./lab-scripts:/opt/lab-scripts
+    command: ["/bin/bash"]
+
+  kali-attacker:
+    image: kalilinux/kali-rolling
+    container_name: kali-attacker
+    privileged: true
+    tty: true
+    stdin_open: true
+    command: ["/bin/bash"]
+
+  zeek:
+    image: blacktop/zeek
+    container_name: zeek
+    tty: true
+    stdin_open: true
+
+  elk:
+    image: sebp/elk
+    container_name: elk
+    ports:
+      - "15601:5601"
+      - "19200:9200"
+      - "15044:5044"
+    environment:
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - MAX_MAP_COUNT=262144
+    tty: true
+    stdin_open: true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  suricata:
+    image: jasonish/suricata:latest
+    container_name: suricata
+    network_mode: "host"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    tty: true
+    stdin_open: true
+
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: fail2ban
+    volumes:
+      - ./fail2ban:/data
+    restart: unless-stopped
+
+  clamav:
+    image: mk0x/docker-clamav
+    container_name: clamav
+    ports:
+      - "3310:3310"
+
+  log-generator:
+    build: ./log-generator
+    container_name: log-generator
+    tty: true
+    stdin_open: true
+
+  web-monitor:
+    build:
+      context: .
+      dockerfile: ./web-monitor/Dockerfile
+    container_name: nosleep-web-monitor
+    ports:
+      - "5000:5000"
+    volumes:
+      - /var/log:/var/log:ro
+      - ./logs:/app/logs
+      - ./web-monitor:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    privileged: true
+    depends_on:
+      - ubuntu-host
+      - log-generator
+      - fail2ban
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+
+networks:
+  default:
+    driver: bridge

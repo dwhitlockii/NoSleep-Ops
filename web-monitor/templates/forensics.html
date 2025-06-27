@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 Advanced Forensics Timeline - NoSleep SOC</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-timeline/7.7.3/vis-timeline-graph2d.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-timeline/7.7.3/vis-timeline-graph2d.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            color: #e6e6e6;
+            overflow-x: hidden;
+        }
+        
+        .header {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 1rem;
+            border-bottom: 2px solid #00ff88;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            color: #00ff88;
+            text-align: center;
+            font-size: 2rem;
+            text-shadow: 0 0 20px #00ff88;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 1rem;
+            padding: 1rem;
+            height: calc(100vh - 100px);
+        }
+        
+        .panel {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 1rem;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.1);
+        }
+        
+        .panel h3 {
+            color: #00ff88;
+            margin-bottom: 1rem;
+            text-align: center;
+            font-size: 1.2rem;
+        }
+        
+        .timeline-panel {
+            grid-column: 1 / -1;
+            height: 300px;
+        }
+        
+        .incident-panel {
+            grid-column: 1 / -1;
+        }
+        
+        #timeline {
+            height: 250px;
+            border: 1px solid #333;
+            border-radius: 5px;
+        }
+        
+        .incident-card {
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid #ff4444;
+            border-radius: 5px;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            transition: all 0.3s ease;
+        }
+        
+        .incident-card:hover {
+            background: rgba(255, 0, 0, 0.2);
+            transform: translateX(5px);
+        }
+        
+        .incident-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .incident-title {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+        
+        .incident-time {
+            color: #888;
+            font-size: 0.9rem;
+        }
+        
+        .incident-details {
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+        
+        .severity-high {
+            border-left: 4px solid #ff4444;
+        }
+        
+        .severity-medium {
+            border-left: 4px solid #ffa500;
+        }
+        
+        .severity-low {
+            border-left: 4px solid #ffff00;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-card {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid #00ff88;
+            border-radius: 5px;
+            padding: 1rem;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #00ff88;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+        
+        .reconstruction-panel {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .attack-chain {
+            background: rgba(255, 165, 0, 0.1);
+            border: 1px solid #ffa500;
+            border-radius: 5px;
+            padding: 1rem;
+            margin: 0.5rem 0;
+        }
+        
+        .chain-step {
+            display: flex;
+            align-items: center;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+        }
+        
+        .step-number {
+            background: #ffa500;
+            color: #000;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+            font-weight: bold;
+        }
+        
+        .step-description {
+            flex: 1;
+            color: #e6e6e6;
+        }
+        
+        .evidence-panel {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .evidence-item {
+            background: rgba(0, 0, 255, 0.1);
+            border: 1px solid #4444ff;
+            border-radius: 5px;
+            padding: 0.8rem;
+            margin: 0.5rem 0;
+        }
+        
+        .evidence-type {
+            color: #6666ff;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        
+        .evidence-content {
+            color: #ccc;
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #888;
+            font-style: italic;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 Advanced Forensics Timeline</h1>
+    </div>
+    
+    <div class="dashboard-grid">
+        <!-- Timeline Panel -->
+        <div class="panel timeline-panel">
+            <h3>📈 Attack Timeline Visualization</h3>
+            <div id="timeline"></div>
+        </div>
+        
+        <!-- Incident Overview -->
+        <div class="panel incident-panel">
+            <h3>🚨 Recent Security Incidents</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-incidents">0</div>
+                    <div class="stat-label">Total Incidents</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="active-threats">0</div>
+                    <div class="stat-label">Active Threats</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="evidence-items">0</div>
+                    <div class="stat-label">Evidence Items</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="resolved-cases">0</div>
+                    <div class="stat-label">Resolved Cases</div>
+                </div>
+            </div>
+            <div id="incidents-list" class="loading">Loading incidents...</div>
+        </div>
+        
+        <!-- Attack Chain Reconstruction -->
+        <div class="panel reconstruction-panel">
+            <h3>🔗 Attack Chain Reconstruction</h3>
+            <div id="attack-chains" class="loading">Analyzing attack patterns...</div>
+        </div>
+        
+        <!-- Digital Evidence -->
+        <div class="panel evidence-panel">
+            <h3>🧾 Digital Evidence Collection</h3>
+            <div id="evidence-list" class="loading">Collecting evidence...</div>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize WebSocket connection
+        const socket = io();
+        
+        // Timeline container
+        let timeline;
+        let timelineData = new vis.DataSet([]);
+        
+        // Initialize timeline
+        function initTimeline() {
+            const container = document.getElementById('timeline');
+            const options = {
+                orientation: 'top',
+                stack: true,
+                showCurrentTime: true,
+                zoomable: true,
+                moveable: true,
+                background: '#1a1a2e',
+                timeAxis: {scale: 'hour', step: 1},
+                format: {
+                    minorLabels: {
+                        hour: 'HH:mm',
+                        day: 'DD'
+                    },
+                    majorLabels: {
+                        hour: 'ddd DD',
+                        day: 'MMMM YYYY'
+                    }
+                },
+                height: '250px',
+                margin: {
+                    item: 10,
+                    axis: 20
+                },
+                type: 'point'
+            };
+            
+            timeline = new vis.Timeline(container, timelineData, options);
+        }
+        
+        // Load forensics data
+        async function loadForensicsData() {
+            try {
+                const response = await fetch('/api/forensics_report');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Forensics API error:', data.error);
+                    loadDemoData();
+                    return;
+                }
+                
+                updateStats(data);
+                updateIncidents(data.incidents || []);
+                updateTimeline(data.timeline || []);
+                updateAttackChains(data.attack_chains || []);
+                updateEvidence(data.evidence || []);
+                
+            } catch (error) {
+                console.error('Error loading forensics data:', error);
+                // Load demo data
+                loadDemoData();
+            }
+        }
+        
+        // Load demo data if API fails
+        function loadDemoData() {
+            const demoData = {
+                stats: {
+                    total_incidents: 34,
+                    active_threats: 8,
+                    evidence_items: 127,
+                    resolved_cases: 26
+                },
+                incidents: [
+                    {
+                        id: 1,
+                        title: "SQL Injection Attack",
+                        severity: "HIGH",
+                        timestamp: new Date(Date.now() - 3600000).toISOString(),
+                        source_ip: "192.168.1.100",
+                        details: "Multiple SQL injection attempts detected on /login endpoint"
+                    },
+                    {
+                        id: 2,
+                        title: "SSH Brute Force",
+                        severity: "MEDIUM",
+                        timestamp: new Date(Date.now() - 7200000).toISOString(),
+                        source_ip: "10.0.0.50",
+                        details: "Automated SSH login attempts from compromised host"
+                    }
+                ],
+                timeline: [
+                    {
+                        id: 1,
+                        content: "SQL Injection",
+                        start: new Date(Date.now() - 3600000),
+                        type: 'point',
+                        className: 'severity-high'
+                    },
+                    {
+                        id: 2,
+                        content: "SSH Brute Force",
+                        start: new Date(Date.now() - 7200000),
+                        type: 'point',
+                        className: 'severity-medium'
+                    }
+                ],
+                attack_chains: [
+                    {
+                        id: 1,
+                        title: "Web Application Compromise",
+                        steps: [
+                            "Initial reconnaissance scan",
+                            "SQL injection payload delivery",
+                            "Database enumeration",
+                            "Privilege escalation attempt"
+                        ]
+                    }
+                ],
+                evidence: [
+                    {
+                        type: "Network Traffic",
+                        content: "POST /login.php HTTP/1.1\nContent: username=admin&password=' OR 1=1--",
+                        timestamp: new Date(Date.now() - 3600000).toISOString()
+                    },
+                    {
+                        type: "System Log",
+                        content: "Failed login attempt from 192.168.1.100",
+                        timestamp: new Date(Date.now() - 3500000).toISOString()
+                    }
+                ]
+            };
+            
+            updateStats(demoData.stats);
+            updateIncidents(demoData.incidents);
+            updateTimeline(demoData.timeline);
+            updateAttackChains(demoData.attack_chains);
+            updateEvidence(demoData.evidence);
+        }
+        
+        // Update statistics
+        function updateStats(stats) {
+            document.getElementById('total-incidents').textContent = stats.total_incidents || 0;
+            document.getElementById('active-threats').textContent = stats.active_threats || 0;
+            document.getElementById('evidence-items').textContent = stats.evidence_items || 0;
+            document.getElementById('resolved-cases').textContent = stats.resolved_cases || 0;
+        }
+        
+        // Update incidents list
+        function updateIncidents(incidents) {
+            const container = document.getElementById('incidents-list');
+            
+            if (incidents.length === 0) {
+                container.innerHTML = '<div class="loading">No incidents found</div>';
+                return;
+            }
+            
+            container.innerHTML = incidents.map(incident => `
+                <div class="incident-card severity-${incident.severity.toLowerCase()}">
+                    <div class="incident-header">
+                        <div class="incident-title">${incident.title}</div>
+                        <div class="incident-time">${new Date(incident.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                    <div class="incident-details">
+                        <strong>Source:</strong> ${incident.source_ip}<br>
+                        <strong>Details:</strong> ${incident.details}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Update timeline
+        function updateTimeline(timelineEvents) {
+            timelineData.clear();
+            
+            // Convert timestamp strings to Date objects for vis.js
+            const processedEvents = timelineEvents.map(event => ({
+                ...event,
+                start: new Date(event.start)
+            }));
+            
+            timelineData.add(processedEvents);
+        }
+        
+        // Update attack chains
+        function updateAttackChains(chains) {
+            const container = document.getElementById('attack-chains');
+            
+            if (chains.length === 0) {
+                container.innerHTML = '<div class="loading">No attack chains detected</div>';
+                return;
+            }
+            
+            container.innerHTML = chains.map(chain => `
+                <div class="attack-chain">
+                    <h4 style="color: #ffa500; margin-bottom: 1rem;">${chain.title}</h4>
+                    ${chain.steps.map((step, index) => `
+                        <div class="chain-step">
+                            <div class="step-number">${index + 1}</div>
+                            <div class="step-description">${step}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+        
+        // Update evidence
+        function updateEvidence(evidence) {
+            const container = document.getElementById('evidence-list');
+            
+            if (evidence.length === 0) {
+                container.innerHTML = '<div class="loading">No evidence collected</div>';
+                return;
+            }
+            
+            container.innerHTML = evidence.map(item => `
+                <div class="evidence-item">
+                    <div class="evidence-type">${item.type}</div>
+                    <div class="evidence-content">${item.content}</div>
+                    <div style="color: #888; font-size: 0.8rem; margin-top: 0.5rem;">
+                        ${new Date(item.timestamp).toLocaleString()}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Socket.IO event handlers
+        socket.on('connect', function() {
+            console.log('Connected to forensics system');
+        });
+        
+        socket.on('new_attack', function(data) {
+            console.log('New attack detected:', data);
+            // Refresh data when new attacks are detected
+            loadForensicsData();
+        });
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initTimeline();
+            loadForensicsData();
+            
+            // Refresh data every 30 seconds
+            setInterval(loadForensicsData, 30000);
+        });
+    </script>
+</body>
+</html> 

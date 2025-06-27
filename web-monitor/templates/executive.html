@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Executive Security Dashboard - NoSleep-Ops</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85));
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            color: #2c3e50;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .security-status {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(46, 204, 113, 0.1);
+            padding: 10px 20px;
+            border-radius: 25px;
+            margin: 10px;
+            border: 2px solid #2ecc71;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-green { background: #2ecc71; }
+        .status-yellow { background: #f39c12; }
+        .status-red { background: #e74c3c; }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .kpi-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85));
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.15);
+        }
+
+        .kpi-number {
+            font-size: 3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .kpi-label {
+            font-size: 1.1em;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .kpi-trend {
+            font-size: 0.9em;
+            margin-top: 8px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        .trend-up { background: rgba(231, 76, 60, 0.1); color: #e74c3c; }
+        .trend-down { background: rgba(46, 204, 113, 0.1); color: #2ecc71; }
+        .trend-stable { background: rgba(52, 152, 219, 0.1); color: #3498db; }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .panel {
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85));
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .panel-icon {
+            font-size: 1.5em;
+            margin-right: 12px;
+        }
+
+        .chart-container {
+            height: 300px;
+            margin: 20px 0;
+        }
+
+        .risk-assessment {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .risk-gauge {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .gauge-container {
+            position: relative;
+            width: 200px;
+            height: 100px;
+            margin: 0 auto 20px;
+        }
+
+        .gauge-arc {
+            width: 200px;
+            height: 100px;
+            border-radius: 200px 200px 0 0;
+            border: 15px solid #e0e0e0;
+            border-bottom: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .gauge-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 200px 200px 0 0;
+            border: 15px solid;
+            border-bottom: none;
+            transform-origin: 50% 100%;
+            transition: transform 0.5s ease;
+        }
+
+        .gauge-low { border-color: #2ecc71; }
+        .gauge-medium { border-color: #f39c12; }
+        .gauge-high { border-color: #e74c3c; }
+
+        .recommendations {
+            margin-top: 20px;
+        }
+
+        .recommendation-item {
+            background: rgba(52, 152, 219, 0.1);
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+
+        .recommendation-priority {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .priority-critical { background: #e74c3c; color: white; }
+        .priority-high { background: #f39c12; color: white; }
+        .priority-medium { background: #3498db; color: white; }
+
+        .financial-impact {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .financial-card {
+            text-align: center;
+            padding: 20px;
+            background: rgba(46, 204, 113, 0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(46, 204, 113, 0.3);
+        }
+
+        .financial-amount {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2ecc71;
+            margin-bottom: 8px;
+        }
+
+        .compliance-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .compliance-item {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            background: rgba(46, 204, 113, 0.1);
+            border: 2px solid #2ecc71;
+        }
+
+        .compliance-score {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #2ecc71;
+            margin-bottom: 5px;
+        }
+
+        .mobile-nav {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            padding: 10px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+        }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: space-around;
+        }
+
+        .nav-button {
+            background: none;
+            border: none;
+            padding: 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .nav-button:hover, .nav-button.active {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .kpi-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+
+            .risk-assessment {
+                grid-template-columns: 1fr;
+            }
+
+            .mobile-nav {
+                display: block;
+            }
+
+            .dashboard-container {
+                padding: 10px 10px 80px 10px;
+            }
+
+            .panel {
+                padding: 15px;
+            }
+        }
+
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Executive Security Dashboard</h1>
+        <div class="security-status" id="securityStatus">
+            <div class="status-indicator status-green" id="statusIndicator"></div>
+            <span id="statusText">Security Posture: STRONG</span>
+        </div>
+        <div style="font-size: 0.9em; color: #666; margin-top: 10px;">
+            Last Updated: <span id="lastUpdated">--</span>
+        </div>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- Key Performance Indicators -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-number" id="securityScore">--</div>
+                <div class="kpi-label">Security Score</div>
+                <div class="kpi-trend trend-stable" id="securityTrend">Stable</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-number" id="incidentsToday">--</div>
+                <div class="kpi-label">Incidents Today</div>
+                <div class="kpi-trend trend-down" id="incidentsTrend">-15%</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-number" id="riskScore">--</div>
+                <div class="kpi-label">Risk Level</div>
+                <div class="kpi-trend trend-stable" id="riskTrend">Controlled</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-number" id="complianceScore">--</div>
+                <div class="kpi-label">Compliance</div>
+                <div class="kpi-trend trend-stable" id="complianceTrend">Compliant</div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="content-grid">
+            <!-- Threat Landscape -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-icon">🎯</span>
+                    Threat Landscape Overview
+                </div>
+                <div class="chart-container">
+                    <canvas id="threatChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Risk Assessment -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-icon">⚡</span>
+                    Risk Assessment
+                </div>
+                <div class="risk-gauge">
+                    <div class="gauge-container">
+                        <div class="gauge-arc">
+                            <div class="gauge-fill gauge-low" id="riskGauge"></div>
+                        </div>
+                    </div>
+                    <div style="font-size: 1.2em; font-weight: bold;" id="riskLevel">LOW RISK</div>
+                    <div style="color: #666; margin-top: 10px;">Overall Risk Posture</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Financial Impact -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-icon">💰</span>
+                Financial Impact & ROI
+            </div>
+            <div class="financial-impact">
+                <div class="financial-card">
+                    <div class="financial-amount" id="costAvoidance">--</div>
+                    <div>Cost Avoidance</div>
+                </div>
+                <div class="financial-card">
+                    <div class="financial-amount" id="securityROI">--</div>
+                    <div>Security ROI</div>
+                </div>
+                <div class="financial-card">
+                    <div class="financial-amount" id="incidentCost">--</div>
+                    <div>Incident Costs</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Compliance Status -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-icon">📋</span>
+                Compliance Status
+            </div>
+            <div class="compliance-status">
+                <div class="compliance-item">
+                    <div class="compliance-score" id="iso27001">--</div>
+                    <div>ISO 27001</div>
+                </div>
+                <div class="compliance-item">
+                    <div class="compliance-score" id="nistCSF">--</div>
+                    <div>NIST CSF</div>
+                </div>
+                <div class="compliance-item">
+                    <div class="compliance-score" id="soc2">--</div>
+                    <div>SOC 2</div>
+                </div>
+                <div class="compliance-item">
+                    <div class="compliance-score" id="gdpr">--</div>
+                    <div>GDPR</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Strategic Recommendations -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-icon">💡</span>
+                Strategic Recommendations
+            </div>
+            <div class="recommendations" id="recommendations">
+                <div class="loading-shimmer" style="height: 60px; border-radius: 5px; margin: 10px 0;"></div>
+                <div class="loading-shimmer" style="height: 60px; border-radius: 5px; margin: 10px 0;"></div>
+                <div class="loading-shimmer" style="height: 60px; border-radius: 5px; margin: 10px 0;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Navigation -->
+    <div class="mobile-nav">
+        <div class="nav-buttons">
+            <button class="nav-button active" onclick="showSection('overview')">📊<br>Overview</button>
+            <button class="nav-button" onclick="showSection('threats')">🎯<br>Threats</button>
+            <button class="nav-button" onclick="showSection('compliance')">📋<br>Compliance</button>
+            <button class="nav-button" onclick="showSection('reports')">📈<br>Reports</button>
+        </div>
+    </div>
+
+    <script>
+        let socket = io();
+        let threatChart;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📊 Executive Dashboard initializing...');
+            initializeCharts();
+            loadExecutiveSummary();
+            
+            // Auto-refresh every 60 seconds
+            setInterval(loadExecutiveSummary, 60000);
+        });
+
+        async function loadExecutiveSummary() {
+            try {
+                console.log('📊 Loading executive summary...');
+                const response = await fetch('/api/executive_summary');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    updateDashboard(data);
+                    console.log('✅ Executive summary loaded successfully!');
+                } else {
+                    throw new Error(`API failed: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('❌ Error loading executive summary:', error);
+                showDemoData();
+            }
+        }
+
+        function updateDashboard(data) {
+            // Update last updated time
+            document.getElementById('lastUpdated').textContent = new Date().toLocaleString();
+
+            // Update security status
+            const securityStatus = data.executive_summary?.security_status || 'UNKNOWN';
+            const statusColor = data.executive_summary?.status_color || 'yellow';
+            
+            document.getElementById('statusText').textContent = `Security Posture: ${securityStatus}`;
+            const statusIndicator = document.getElementById('statusIndicator');
+            statusIndicator.className = `status-indicator status-${statusColor === 'red' ? 'red' : statusColor === 'green' ? 'green' : 'yellow'}`;
+
+            // Update KPIs
+            const securityPosture = data.security_posture?.overall_score || 85;
+            const incidentsToday = data.key_metrics?.attack_volume?.last_24h || 0;
+            const riskScore = data.risk_dashboard?.risk_score || 25;
+            const complianceScore = data.compliance_status?.overall_compliance_score || '96%';
+
+            document.getElementById('securityScore').textContent = securityPosture;
+            document.getElementById('incidentsToday').textContent = incidentsToday;
+            document.getElementById('riskScore').textContent = riskScore;
+            document.getElementById('complianceScore').textContent = complianceScore;
+
+            // Update risk gauge
+            updateRiskGauge(riskScore);
+
+            // Update financial impact
+            const financialImpact = data.business_impact?.financial_impact || {};
+            document.getElementById('costAvoidance').textContent = formatCurrency(financialImpact.cost_avoidance || 0);
+            document.getElementById('securityROI').textContent = financialImpact.roi_on_security || '400%';
+            document.getElementById('incidentCost').textContent = formatCurrency(financialImpact.estimated_total_cost || 0);
+
+            // Update compliance scores
+            const compliance = data.compliance_status?.frameworks || {};
+            document.getElementById('iso27001').textContent = compliance.ISO_27001?.score || '95%';
+            document.getElementById('nistCSF').textContent = compliance.NIST_CSF?.score || '98%';
+            document.getElementById('soc2').textContent = compliance.SOC_2?.score || '94%';
+            document.getElementById('gdpr').textContent = compliance.GDPR?.score || '97%';
+
+            // Update threat chart
+            updateThreatChart(data.threat_landscape?.top_threats || []);
+
+            // Update recommendations
+            updateRecommendations(data.recommendations || []);
+        }
+
+        function updateRiskGauge(riskScore) {
+            const gauge = document.getElementById('riskGauge');
+            const riskLevel = document.getElementById('riskLevel');
+            
+            // Convert risk score to percentage (0-100 becomes 0-180 degrees)
+            const percentage = Math.min(riskScore, 100);
+            const degrees = (percentage / 100) * 180;
+            
+            gauge.style.transform = `rotate(${degrees}deg)`;
+            
+            // Update risk level and color
+            if (riskScore <= 30) {
+                riskLevel.textContent = 'LOW RISK';
+                riskLevel.style.color = '#2ecc71';
+                gauge.className = 'gauge-fill gauge-low';
+            } else if (riskScore <= 60) {
+                riskLevel.textContent = 'MEDIUM RISK';
+                riskLevel.style.color = '#f39c12';
+                gauge.className = 'gauge-fill gauge-medium';
+            } else {
+                riskLevel.textContent = 'HIGH RISK';
+                riskLevel.style.color = '#e74c3c';
+                gauge.className = 'gauge-fill gauge-high';
+            }
+        }
+
+        function initializeCharts() {
+            // Threat landscape chart
+            const ctx = document.getElementById('threatChart').getContext('2d');
+            threatChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            '#FF6384',
+                            '#36A2EB',
+                            '#FFCE56',
+                            '#4BC0C0',
+                            '#9966FF',
+                            '#FF9F40'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateThreatChart(threats) {
+            const labels = threats.map(t => t.threat || 'Unknown');
+            const data = threats.map(t => t.count || 0);
+            
+            threatChart.data.labels = labels;
+            threatChart.data.datasets[0].data = data;
+            threatChart.update();
+        }
+
+        function updateRecommendations(recommendations) {
+            const container = document.getElementById('recommendations');
+            container.innerHTML = '';
+
+            if (recommendations.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: #666;">No recommendations at this time</div>';
+                return;
+            }
+
+            recommendations.slice(0, 5).forEach(rec => {
+                const recElement = document.createElement('div');
+                recElement.className = 'recommendation-item';
+                recElement.innerHTML = `
+                    <div class="recommendation-priority priority-${rec.priority.toLowerCase()}">${rec.priority}</div>
+                    <div style="font-weight: bold; margin-bottom: 8px;">${rec.title}</div>
+                    <div style="margin-bottom: 8px; color: #666;">${rec.business_justification}</div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: #888;">
+                        <span>Investment: ${rec.investment_required}</span>
+                        <span>ROI: ${rec.expected_roi}</span>
+                        <span>Timeline: ${rec.timeline}</span>
+                    </div>
+                `;
+                container.appendChild(recElement);
+            });
+        }
+
+        function formatCurrency(amount) {
+            if (amount >= 1000000) {
+                return '$' + (amount / 1000000).toFixed(1) + 'M';
+            } else if (amount >= 1000) {
+                return '$' + (amount / 1000).toFixed(0) + 'K';
+            }
+            return '$' + amount.toLocaleString();
+        }
+
+        function showSection(section) {
+            // Update active button
+            document.querySelectorAll('.nav-button').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // In a full implementation, this would show/hide different sections
+            console.log('Showing section:', section);
+        }
+
+        function showDemoData() {
+            // Show demo data if APIs are not working
+            const demoData = {
+                executive_summary: {
+                    security_status: 'MODERATE RISK - Standard Operations',
+                    status_color: 'yellow'
+                },
+                security_posture: {
+                    overall_score: 85
+                },
+                key_metrics: {
+                    attack_volume: {
+                        last_24h: 25
+                    }
+                },
+                risk_dashboard: {
+                    risk_score: 35
+                },
+                compliance_status: {
+                    overall_compliance_score: '96%',
+                    frameworks: {
+                        ISO_27001: { score: '95%' },
+                        NIST_CSF: { score: '98%' },
+                        SOC_2: { score: '94%' },
+                        GDPR: { score: '97%' }
+                    }
+                },
+                business_impact: {
+                    financial_impact: {
+                        cost_avoidance: 800000,
+                        roi_on_security: '400%',
+                        estimated_total_cost: 100000
+                    }
+                },
+                threat_landscape: {
+                    top_threats: [
+                        { threat: 'SSH Brute Force', count: 45 },
+                        { threat: 'SQL Injection', count: 23 },
+                        { threat: 'XSS Attempts', count: 18 },
+                        { threat: 'Directory Traversal', count: 12 }
+                    ]
+                },
+                recommendations: [
+                    {
+                        priority: 'HIGH',
+                        title: 'Strengthen Remote Access Security',
+                        business_justification: 'Reduce risk of unauthorized system access',
+                        investment_required: '$25,000',
+                        expected_roi: '300%',
+                        timeline: '30 days'
+                    },
+                    {
+                        priority: 'CRITICAL',
+                        title: 'Deploy Web Application Firewall',
+                        business_justification: 'Protect customer data and prevent service disruption',
+                        investment_required: '$50,000',
+                        expected_roi: '500%',
+                        timeline: '45 days'
+                    }
+                ]
+            };
+
+            updateDashboard(demoData);
+        }
+
+        // Socket.IO event handlers
+        socket.on('connect', function() {
+            console.log('Connected to Executive Dashboard');
+        });
+
+        socket.on('security_update', function(data) {
+            // Trigger immediate update on security events
+            loadExecutiveSummary();
+        });
+    </script>
+</body>
+</html> 
