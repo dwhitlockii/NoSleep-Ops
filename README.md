@@ -7,6 +7,17 @@ This lab simulates a real-world Linux battlefield with log storms, brute-force a
 
 ## 🧰 What's Inside
 
+python demo-next-gen-soc.py
+python generate-attacks.py  
+
+Basic Dashboard: http://localhost:5000
+Advanced SOC: http://localhost:5000/advanced
+AI Threat Hunter: http://localhost:5000/threat-hunter
+Executive Dashboard: http://localhost:5000/executive
+Mobile Dashboard: http://localhost:5000/mobile
+Forensics Dashboard: http://localhost:5000/forensics
+Attack monitoring active
+
 ### Dockerized Environment
 - **ubuntu-host** – Fully loaded Linux admin box (auditd, fail2ban, chkrootkit, ClamAV, tcpdump, etc.)
 - **kali-attacker** – Simulate external attacks and test detection workflows
